@@ -36,10 +36,31 @@
   .layer{display:flex;align-items:center;justify-content:space-between;padding:8px 0;cursor:pointer;}
   .layer .lbl{display:flex;align-items:center;gap:8px;font-size:13px;}
   .layer .dot{width:10px;height:10px;border-radius:50%;}
-  .tog{width:36px;height:20px;border-radius:10px;background:#334155;position:relative;transition:.3s;}
+  .tog{width:36px;height:20px;border-radius:10px;background:#334155;position:relative;transition:.3s;flex:none;}
   .tog.on{background:var(--accent);}
   .tog::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.3s;}
   .tog.on::after{left:18px;}
+
+  /* ▼▼ 新增：透明度滑桿 ▼▼ */
+  .opa{padding:4px 0 10px 18px;}
+  .opa .row{display:flex;align-items:center;gap:8px;}
+  .opa label{font-size:11px;color:var(--t3);white-space:nowrap;}
+  .opa input[type=range]{flex:1;height:4px;-webkit-appearance:none;appearance:none;background:#334155;border-radius:3px;outline:none;}
+  .opa input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;}
+  .opa input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;}
+  .opa .val{font-size:11px;color:var(--accent);width:34px;text-align:right;}
+
+  /* ▼▼ 新增：底圖切換按鈕 ▼▼ */
+  .basebtns{display:flex;gap:6px;margin-bottom:4px;}
+  .basebtn{flex:1;padding:6px 0;font-size:11px;text-align:center;border-radius:6px;cursor:pointer;
+           background:var(--bg);border:1px solid var(--border);color:var(--t2);transition:.2s;font-family:inherit;}
+  .basebtn:hover{background:var(--card2);}
+  .basebtn.on{background:rgba(99,179,237,.18);border-color:var(--accent);color:var(--accent);font-weight:600;}
+
+  /* ▼▼ 新增：警示條 ▼▼ */
+  .warn{background:rgba(236,201,75,.12);border:1px solid rgba(236,201,75,.35);border-radius:8px;
+        padding:10px 12px;margin-top:8px;font-size:11.5px;line-height:1.6;color:#f0d98a;}
+  .warn b{color:var(--mid);}
 
   .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
   .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;}
@@ -60,7 +81,7 @@
   .card .tag{background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.15);border-radius:4px;padding:1px 7px;font-size:10px;color:var(--t2);}
 
   .map-wrap{position:relative;}
-  #map{width:100%;height:100%;}
+  #map{width:100%;height:100%;background:#e8e8e8;}
   .legend{position:absolute;bottom:20px;left:20px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;z-index:999;font-size:11px;}
   .legend h5{color:var(--t2);margin-bottom:8px;font-size:10px;text-transform:uppercase;letter-spacing:1px;}
   .legend .li{display:flex;align-items:center;gap:8px;margin:4px 0;}
@@ -73,6 +94,7 @@
 
   .foot{padding:10px 14px;background:var(--bg);border-top:1px solid var(--border);text-align:center;font-size:10px;color:var(--t3);line-height:1.6;}
   .foot a{color:var(--accent);text-decoration:none;}
+  .foot .disc{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:9.5px;color:#55606f;text-align:left;line-height:1.55;}
 
   .leaflet-popup-content-wrapper{background:var(--card)!important;color:var(--t1)!important;border:1px solid var(--border)!important;border-radius:10px!important;box-shadow:0 8px 30px rgba(0,0,0,.4)!important;}
   .leaflet-popup-tip{background:var(--card)!important;}
@@ -81,6 +103,7 @@
   .pop-lbl{color:var(--t3);}
   .pop-val{font-weight:500;}
   .pop-price{margin-top:8px;font-size:15px;font-weight:700;text-align:center;padding:6px;border-radius:6px;background:rgba(99,179,237,.1);}
+  .pop-hint{margin-top:8px;font-size:10.5px;color:var(--t3);line-height:1.5;border-top:1px solid rgba(255,255,255,.08);padding-top:6px;}
 
   @media(max-width:768px){
     .app{grid-template-columns:1fr;grid-template-rows:auto 50vh 1fr;}
@@ -118,26 +141,64 @@
 
     <div class="sec" id="queryInfoSec" style="display:none;">
       <div class="query-info" id="queryInfo"></div>
+      <div class="warn" id="districtWarn" style="display:none;"></div>
+    </div>
+
+    <!-- ▼▼ 修正 P3：新增底圖切換，預設淺色，關掉圖層也不會變黑 ▼▼ -->
+    <div class="sec">
+      <h3>底圖</h3>
+      <div class="basebtns">
+        <button class="basebtn on" id="bb-light" onclick="setBase('light')">淺色</button>
+        <button class="basebtn"    id="bb-gray"  onclick="setBase('gray')">灰階</button>
+        <button class="basebtn"    id="bb-dark"  onclick="setBase('dark')">深色</button>
+      </div>
     </div>
 
     <div class="sec">
       <h3>圖層控制</h3>
+
       <div class="layer" onclick="toggleLayer('luimap')">
         <div class="lbl"><div class="dot" style="background:#f6ad55;"></div><span>國土利用圖（分區顏色）</span></div>
         <div class="tog on" id="tog-luimap"></div>
       </div>
-      <div class="layer" onclick="toggleLayer('cadastral')">
-        <div class="lbl"><div class="dot" style="background:#63b3ed;"></div><span>地籍圖（地號邊界）</span></div>
-        <div class="tog on" id="tog-cadastral"></div>
+      <!-- ▼▼ 修正 P5 / P8-3：透明度滑桿，預設 50% ▼▼ -->
+      <div class="opa">
+        <div class="row">
+          <label>透明度</label>
+          <input type="range" id="opa-luimap" min="0" max="100" value="50" oninput="setOpacity('luimap',this.value)">
+          <span class="val" id="opaval-luimap">50%</span>
+        </div>
       </div>
+
+      <!-- ▼▼ 修正 P4（部分）：新增非都市土地使用分區圖 ▼▼ -->
+      <div class="layer" onclick="toggleLayer('nurban')">
+        <div class="lbl"><div class="dot" style="background:#f687b3;"></div><span>非都市土地使用分區</span></div>
+        <div class="tog" id="tog-nurban"></div>
+      </div>
+      <div class="opa">
+        <div class="row">
+          <label>透明度</label>
+          <input type="range" id="opa-nurban" min="0" max="100" value="50" oninput="setOpacity('nurban',this.value)">
+          <span class="val" id="opaval-nurban">50%</span>
+        </div>
+      </div>
+
+      <!-- ▼▼ 修正 P6：誠實標示這是「段籍圖」而非地號邊界 ▼▼ -->
+      <div class="layer" onclick="toggleLayer('landsect')">
+        <div class="lbl"><div class="dot" style="background:#63b3ed;"></div><span>段籍圖（地段外圍）</span></div>
+        <div class="tog on" id="tog-landsect"></div>
+      </div>
+
       <div class="layer" onclick="toggleLayer('emap')">
         <div class="lbl"><div class="dot" style="background:#68d391;"></div><span>電子地圖（路名）</span></div>
-        <div class="tog on" id="tog-emap"></div>
+        <div class="tog" id="tog-emap"></div>
       </div>
+
       <div class="layer" onclick="toggleLayer('photo')">
         <div class="lbl"><div class="dot" style="background:#b794f4;"></div><span>正射影像（衛星）</span></div>
         <div class="tog" id="tog-photo"></div>
       </div>
+
       <div class="layer" onclick="toggleLayer('markers')">
         <div class="lbl"><div class="dot" style="background:#fc8181;"></div><span>成交標記</span></div>
         <div class="tog on" id="tog-markers"></div>
@@ -162,6 +223,12 @@
       ・<a href="https://lin.ee/Faz0doj" target="_blank">LINE 官方帳號</a>
       ・<a href="https://reurl.cc/1OZNAY" target="_blank">LINE 社群</a>
       <br>Nick Chang｜nickleo051216@gmail.com｜0932-684-051
+      <!-- ▼▼ 新增：免責聲明（照官方用語，保護自己也顯專業）▼▼ -->
+      <div class="disc">
+        ※ 本系統圖資僅供參考，不作為法律證明文件。地籍與段籍圖僅可作為土地位置之示意，
+        實際圖形應以地政事務所核發之謄本為準，土地界址應以各地政事務所鑑界為準。
+        成交資料來源為內政部不動產成交案件實際資訊，實際交易條件請自行查證。
+      </div>
     </div>
   </div>
 
@@ -179,75 +246,153 @@
 </div>
 
 <script>
+/* ============================================================
+   高雄市 地段 → 行政區 對照表
+   ------------------------------------------------------------
+   ★ 修正重點（P2 橋科段跑出林園區）：
+     原程式碼寫死 params.get('district') || '林園區'，
+     只要 n8n 沒帶 district 進來，畫面就一律顯示「林園區」，
+     跟實際地段完全無關 —— 這就是客戶看到的錯誤來源。
+     現在改成：先查對照表，查不到就顯示「—」，絕不亂猜。
+   ★ 要擴充：照下面格式一行一段加上去即可。
+   ============================================================ */
+const SECTION_DISTRICT = {
+  '橋科段':'橋頭區',
+  '昭明段':'大寮區'
+  // 例：'溪洲段':'大寮區',
+};
+
 // === URL 參數解析 ===
-const params = new URLSearchParams(window.location.search);
-const qLat = parseFloat(params.get('lat')) || 22.505;
-const qLng = parseFloat(params.get('lng')) || 120.395;
-const qSection = decodeURIComponent(params.get('section') || '');
-const qDistrict = decodeURIComponent(params.get('district') || '林園區');
-const qLandNum = decodeURIComponent(params.get('landNumber') || '');
-// n8n Webhook URL for fetching data (optional)
-const apiUrl = params.get('api') || '';
+const params    = new URLSearchParams(window.location.search);
+const qLat      = parseFloat(params.get('lat')) || 22.505;
+const qLng      = parseFloat(params.get('lng')) || 120.395;
+const qSection  = decodeURIComponent(params.get('section') || '');
+const qLandNum  = decodeURIComponent(params.get('landNumber') || '');
+const apiUrl    = params.get('api') || '';
+
+// ★ P2 修正：不再硬寫死「林園區」
+const paramDistrict  = decodeURIComponent(params.get('district') || '').trim();
+const lookupDistrict = SECTION_DISTRICT[qSection] || '';
+const qDistrict      = paramDistrict || lookupDistrict || '';
+
+// 若 n8n 傳來的行政區 與 對照表不符 → 提示，不靜靜地顯示錯的
+const districtMismatch = !!(paramDistrict && lookupDistrict && paramDistrict !== lookupDistrict);
 
 let allData = [];
 
 // === 地圖初始化 ===
 const map = L.map('map', { center: [qLat, qLng], zoom: 16, zoomControl: true });
 
-const osmBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 20, attribution: '&copy; OSM &copy; CARTO'
-}).addTo(map);
+/* ★ P3 修正：原本底圖是 CARTO dark_all（純黑底），
+     一旦關掉國土利用圖就整片漆黑。改為預設淺色 Positron，並可切換。*/
+const baseMaps = {
+  light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+          { maxZoom:20, attribution:'&copy; OSM &copy; CARTO' }),
+  gray:  L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP01/default/GoogleMapsCompatible/{z}/{y}/{x}',
+          { maxZoom:20, attribution:'&copy; NLSC 電子地圖(灰階)' }),
+  dark:  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          { maxZoom:20, attribution:'&copy; OSM &copy; CARTO' })
+};
+let currentBase = 'light';
+baseMaps.light.addTo(map);
 
-const emapLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
-  maxZoom: 20, opacity: 0.3, attribution: '&copy; NLSC 電子地圖'
-}).addTo(map);
+function setBase(name){
+  if (name === currentBase) return;
+  map.removeLayer(baseMaps[currentBase]);
+  baseMaps[name].addTo(map);
+  baseMaps[name].bringToBack();          // 底圖永遠壓在最下面
+  document.getElementById('bb-' + currentBase).classList.remove('on');
+  document.getElementById('bb-' + name).classList.add('on');
+  currentBase = name;
+}
 
+// 路名圖層（原本 opacity 0.3 太淡，調到 0.8 才看得清楚；預設關閉避免畫面太雜）
+const emapLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+  maxZoom: 20, opacity: 0.8, attribution: '&copy; NLSC 電子地圖'
+});
+
+// 國土利用現況調查成果圖（分區顏色）— 預設 50% 透明
 const luimapLayer = L.tileLayer.wms('https://wms.nlsc.gov.tw/wms', {
-  layers: 'LUIMAP', format: 'image/png', transparent: true, opacity: 0.5, maxZoom: 20,
-  attribution: '&copy; NLSC 國土利用圖'
+  layers:'LUIMAP', format:'image/png', transparent:true, opacity:0.5, maxZoom:20,
+  attribution:'&copy; NLSC 國土利用圖'
 }).addTo(map);
 
-const cadastralLayer = L.tileLayer.wms('https://wms.nlsc.gov.tw/wms', {
-  layers: 'LANDSECT', format: 'image/png', transparent: true, opacity: 0.6, maxZoom: 20,
-  attribution: '&copy; NLSC 地籍圖'
+/* ★ 新增：非都市土地使用分區圖（nURBAN1）
+     這是客戶說的「國土測繪雲版本」裡的其中一層，已驗證可用 */
+const nurbanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/nURBAN1/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+  maxZoom:20, opacity:0.5, attribution:'&copy; NLSC 非都市土地使用分區圖'
+});
+
+/* ★ P6 說明：LANDSECT 的官方名稱是「地段外圍圖（段籍圖）」，
+     它本來就只畫「段」的外圍，不含地號邊界。
+     所以標籤改成誠實的名字，避免客戶再誤會。*/
+const landsectLayer = L.tileLayer.wms('https://wms.nlsc.gov.tw/wms', {
+  layers:'LANDSECT', format:'image/png', transparent:true, opacity:0.6, maxZoom:20,
+  attribution:'&copy; NLSC 段籍圖'
 }).addTo(map);
 
 const photoLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}', {
-  maxZoom: 20, opacity: 0.5, attribution: '&copy; NLSC 正射影像'
+  maxZoom: 20, opacity: 1, attribution: '&copy; NLSC 正射影像'
 });
 
 const layers = {
-  luimap: { layer: luimapLayer, active: true },
-  cadastral: { layer: cadastralLayer, active: true },
-  emap: { layer: emapLayer, active: true },
-  photo: { layer: photoLayer, active: false },
-  markers: { active: true }
+  luimap:   { layer: luimapLayer,   active: true  },
+  nurban:   { layer: nurbanLayer,   active: false },
+  landsect: { layer: landsectLayer, active: true  },
+  emap:     { layer: emapLayer,     active: false },
+  photo:    { layer: photoLayer,    active: false },
+  markers:  { active: true }
 };
+
+// 透明度滑桿
+function setOpacity(name, v){
+  layers[name].layer.setOpacity(v / 100);
+  document.getElementById('opaval-' + name).textContent = v + '%';
+}
 
 // === 查詢目標標記 ===
 const targetIcon = L.divIcon({
   className: 'custom-marker',
-  html: `<div style="width:20px;height:20px;background:var(--land);border:3px solid #fff;border-radius:4px;box-shadow:0 0 15px rgba(183,148,244,.6),0 0 30px rgba(183,148,244,.3);"></div>`,
+  html: `<div style="width:20px;height:20px;background:#b794f4;border:3px solid #fff;border-radius:4px;box-shadow:0 0 15px rgba(183,148,244,.8),0 0 30px rgba(183,148,244,.4);"></div>`,
   iconSize: [20, 20], iconAnchor: [10, 10]
 });
-const targetMarker = L.marker([qLat, qLng], { icon: targetIcon }).addTo(map);
-targetMarker.bindPopup(`
+const targetMarker = L.marker([qLat, qLng], { icon: targetIcon, draggable: true }).addTo(map);
+
+function targetPopupHtml(lat, lng){
+  return `
   <div class="pop-title">📍 查詢目標</div>
-  <div class="pop-row"><span class="pop-lbl">行政區</span><span class="pop-val">${qDistrict}</span></div>
+  <div class="pop-row"><span class="pop-lbl">行政區</span><span class="pop-val">${qDistrict || '—'}</span></div>
   ${qSection ? `<div class="pop-row"><span class="pop-lbl">地段</span><span class="pop-val">${qSection}</span></div>` : ''}
   ${qLandNum ? `<div class="pop-row"><span class="pop-lbl">地號</span><span class="pop-val">${qLandNum}</span></div>` : ''}
-`).openPopup();
+  <div class="pop-row"><span class="pop-lbl">座標</span><span class="pop-val">${lat.toFixed(5)}, ${lng.toFixed(5)}</span></div>
+  <div class="pop-hint">※ 位置為系統定位之概略點位。若有偏移，可直接拖曳本標記校正。</div>`;
+}
+targetMarker.bindPopup(targetPopupHtml(qLat, qLng)).openPopup();
+
+// ★ P1 / P8-1 緩解：允許手動拖曳校正定位（治標，根治仍需修 n8n 定位來源）
+targetMarker.on('dragend', function(){
+  const p = targetMarker.getLatLng();
+  targetMarker.setPopupContent(targetPopupHtml(p.lat, p.lng)).openPopup();
+  const el = document.getElementById('coordLine');
+  if (el) el.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}（已手動校正）`;
+});
 
 // 顯示查詢資訊
-if (qSection || qDistrict) {
+if (qSection || qDistrict || qLandNum) {
   document.getElementById('queryInfoSec').style.display = 'block';
   document.getElementById('queryInfo').innerHTML = `
     <div class="qi-title">📍 查詢資訊</div>
-    ${qDistrict ? '行政區：<strong>' + qDistrict + '</strong><br>' : ''}
+    行政區：<strong>${qDistrict || '—'}</strong><br>
     ${qSection ? '地段：<strong>' + qSection + '</strong><br>' : ''}
     ${qLandNum ? '地號：<strong>' + qLandNum + '</strong><br>' : ''}
-    座標：${qLat.toFixed(5)}, ${qLng.toFixed(5)}
+    座標：<span id="coordLine">${qLat.toFixed(5)}, ${qLng.toFixed(5)}</span>
   `;
+  if (districtMismatch) {
+    const w = document.getElementById('districtWarn');
+    w.style.display = 'block';
+    w.innerHTML = `⚠️ <b>行政區可能有誤</b><br>
+      系統帶入「${paramDistrict}」，但「${qSection}」應位於 <b>${lookupDistrict}</b>，請留意定位是否正確。`;
+  }
 }
 
 // === 標記群組 ===
@@ -258,7 +403,7 @@ function getPrCls(p) { return p >= 20 ? 'hi' : p >= 10 ? 'mid' : 'lo'; }
 
 function createMarkers(data) {
   markerGroup.clearLayers();
-  data.forEach((d, i) => {
+  data.forEach((d) => {
     if (!d.lat || !d.lng || d.lat === 0) return;
     const color = getColor(d.unitPrice);
     const icon = L.divIcon({
@@ -280,10 +425,19 @@ function createMarkers(data) {
     `;
     markerGroup.addLayer(L.marker([d.lat, d.lng], { icon }).bindPopup(popup, { maxWidth: 280 }));
   });
+
+  // ★ P7 診斷：若有資料但全部缺座標，明確告知原因（不再靜默無標記）
+  const withCoord = data.filter(d => d.lat && d.lng && d.lat !== 0).length;
+  const el = document.getElementById('districtWarn');
+  if (data.length > 0 && withCoord === 0 && el && !districtMismatch) {
+    el.style.display = 'block';
+    el.innerHTML = `⚠️ <b>成交標記無法顯示</b><br>
+      本次 ${data.length} 筆成交資料皆未含經緯度座標，故地圖上無標記點（左側清單仍可正常檢視）。`;
+  }
 }
 
 function renderCards(data) {
-  document.getElementById('cardList').innerHTML = data.map((d, i) => `
+  document.getElementById('cardList').innerHTML = data.map((d) => `
     <div class="card" onclick="flyTo(${d.lat},${d.lng})">
       <div class="top">
         <div class="addr">${d.section || ''}${d.landNumber ? ' ' + d.landNumber : ''}</div>
@@ -303,11 +457,12 @@ function updateStats(data) {
   const prices = data.map(d => d.unitPrice).filter(p => p > 0);
   document.getElementById('s-count').textContent = data.length;
   document.getElementById('s-avg').textContent = prices.length ? (prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(1) : '-';
-  document.getElementById('s-hi').textContent = prices.length ? Math.max(...prices).toFixed(1) : '-';
-  document.getElementById('s-lo').textContent = prices.length ? Math.min(...prices).toFixed(1) : '-';
+  document.getElementById('s-hi').textContent  = prices.length ? Math.max(...prices).toFixed(1) : '-';
+  document.getElementById('s-lo').textContent  = prices.length ? Math.min(...prices).toFixed(1) : '-';
 }
 
 function flyTo(lat, lng) {
+  if (!lat || !lng) return;
   map.flyTo([lat, lng], 18, { duration: 0.8 });
   markerGroup.eachLayer(m => {
     if (Math.abs(m.getLatLng().lat - lat) < 0.0001 && Math.abs(m.getLatLng().lng - lng) < 0.0001) m.openPopup();
@@ -317,13 +472,14 @@ function flyTo(lat, lng) {
 function toggleLayer(name) {
   const info = layers[name];
   const el = document.getElementById('tog-' + name);
+  info.active = !info.active;
+  el.classList.toggle('on');
   if (name === 'markers') {
-    info.active = !info.active; el.classList.toggle('on');
     info.active ? map.addLayer(markerGroup) : map.removeLayer(markerGroup);
     return;
   }
-  info.active = !info.active; el.classList.toggle('on');
   info.active ? map.addLayer(info.layer) : map.removeLayer(info.layer);
+  if (info.active) baseMaps[currentBase].bringToBack();   // 確保底圖不會蓋住
 }
 
 function filterData(q) {
@@ -341,7 +497,6 @@ function loadData(data) {
   createMarkers(data);
   renderCards(data);
   updateStats(data);
-  // Fit bounds if multiple markers
   if (data.length > 1) {
     const validPts = data.filter(d => d.lat && d.lng && d.lat !== 0);
     if (validPts.length > 0) {
@@ -352,48 +507,36 @@ function loadData(data) {
   document.getElementById('loading').classList.remove('show');
 }
 
+// 統一的欄位對應
+function mapRow(d){
+  return {
+    district:  d['行政區'] || d.district || '',
+    section:   d['地段'] || d.section || '',
+    landNumber:d['地號'] || d.landNumber || '',
+    area:      d['面積(坪)'] || d.area || '',
+    totalPrice:d['總價(萬)'] || d.totalPrice || '',
+    unitPrice: parseFloat(d['單價(萬)-住區單價'] || d.unitPrice || 0),
+    zoning:    d['分區'] || d.zoning || '',
+    date:      d['日期'] || d.date || '',
+    lat:       parseFloat(d.lat || 0),
+    lng:       parseFloat(d.lng || 0)
+  };
+}
+
 // === 資料載入 ===
-// 方式1: 從 URL 的 data 參數讀取 (Base64 encoded JSON)
 const encodedData = params.get('data');
 if (encodedData) {
   try {
-    const decoded = JSON.parse(atob(encodedData));
-    loadData(decoded.map(d => ({
-      district: d['行政區'] || d.district || '',
-      section: d['地段'] || d.section || '',
-      landNumber: d['地號'] || d.landNumber || '',
-      area: d['面積(坪)'] || d.area || '',
-      totalPrice: d['總價(萬)'] || d.totalPrice || '',
-      unitPrice: parseFloat(d['單價(萬)-住區單價'] || d.unitPrice || 0),
-      zoning: d['分區'] || d.zoning || '',
-      date: d['日期'] || d.date || '',
-      lat: parseFloat(d.lat || 0),
-      lng: parseFloat(d.lng || 0)
-    })));
-  } catch(e) { console.error('Data parse error:', e); }
+    loadData(JSON.parse(atob(encodedData)).map(mapRow));
+  } catch(e) { console.error('Data parse error:', e); loadData([]); }
 }
-// 方式2: 從 n8n Webhook API 拉資料
 else if (apiUrl) {
   document.getElementById('loading').classList.add('show');
   fetch(apiUrl + '?lat=' + qLat + '&lng=' + qLng + '&district=' + encodeURIComponent(qDistrict) + '&section=' + encodeURIComponent(qSection))
     .then(r => r.json())
-    .then(data => {
-      loadData((data.nearby || data).map(d => ({
-        district: d['行政區'] || d.district || '',
-        section: d['地段'] || d.section || '',
-        landNumber: d['地號'] || d.landNumber || '',
-        area: d['面積(坪)'] || d.area || '',
-        totalPrice: d['總價(萬)'] || d.totalPrice || '',
-        unitPrice: parseFloat(d['單價(萬)-住區單價'] || d.unitPrice || 0),
-        zoning: d['分區'] || d.zoning || '',
-        date: d['日期'] || d.date || '',
-        lat: parseFloat(d.lat || 0),
-        lng: parseFloat(d.lng || 0)
-      })));
-    })
+    .then(data => loadData((data.nearby || data).map(mapRow)))
     .catch(e => { console.error('API error:', e); document.getElementById('loading').classList.remove('show'); });
 }
-// 方式3: 沒有參數，顯示空白地圖
 else {
   loadData([]);
 }
