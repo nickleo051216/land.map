@@ -517,17 +517,32 @@ function mapRow(d){
     totalPrice:d['總價(萬)'] || d.totalPrice || '',
     unitPrice: parseFloat(d['單價(萬)-住區單價'] || d.unitPrice || 0),
     zoning:    d['分區'] || d.zoning || '',
-    date:      d['日期'] || d.date || '',
+    date:      String(d['日期'] || d.date || '').replace(/^0+(?=\d)/, ''),  // 0115/2/5 → 115/2/5
     lat:       parseFloat(d.lat || 0),
     lng:       parseFloat(d.lng || 0)
   };
+}
+
+/* ★ 修正亂碼（UTF-8 Base64 解碼）
+   n8n 用 Buffer.from(JSON, 'utf-8').toString('base64') 編碼中文，
+   瀏覽器的 atob() 只會把每個位元組當 Latin-1，
+   於是「鳳山段」被拆成「é³³å±±æ®µ」。
+   正解：Base64 → 位元組 → 用 TextDecoder 以 UTF-8 還原。 */
+function b64ToUtf8(str){
+  const bin = atob(str);
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 // === 資料載入 ===
 const encodedData = params.get('data');
 if (encodedData) {
   try {
-    loadData(JSON.parse(atob(encodedData)).map(mapRow));
+    // 先用 UTF-8 解法；萬一是舊格式，退回 atob 以策安全
+    let jsonStr;
+    try { jsonStr = b64ToUtf8(encodedData); }
+    catch(_) { jsonStr = atob(encodedData); }
+    loadData(JSON.parse(jsonStr).map(mapRow));
   } catch(e) { console.error('Data parse error:', e); loadData([]); }
 }
 else if (apiUrl) {
