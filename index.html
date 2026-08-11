@@ -109,6 +109,10 @@
     .app{grid-template-columns:1fr;grid-template-rows:auto 50vh 1fr;}
     .side{order:3;} .hdr .right{display:none;}
   }
+
+.cmbtn{flex:1;padding:6px 0;font-size:12px;background:var(--panel,#1c2330);color:var(--muted,#9fb0c0);border:1px solid var(--line,#2b3441);border-radius:7px;cursor:pointer;transition:.15s;}
+.cmbtn.on{background:#58a6ff;color:#0d1117;border-color:#58a6ff;font-weight:700;}
+.cmbtn:hover{border-color:#58a6ff;}
 </style>
 </head>
 <body>
@@ -170,9 +174,22 @@
         </div>
       </div>
 
-      <!-- ▼▼ 修正 P4（部分）：新增非都市土地使用分區圖 ▼▼ -->
+      <!-- ★ C-1①：開放資料分區底圖（自建、可商用） -->
+      <div class="layer" onclick="toggleLayer('zonebase')">
+        <div class="lbl"><div class="dot" style="background:#7cb342;"></div><span>分區底圖（開放資料）</span></div>
+        <div class="tog" id="tog-zonebase"></div>
+      </div>
+      <div class="opa">
+        <div class="row">
+          <label>透明度</label>
+          <input type="range" id="opa-zonebase" min="0" max="100" value="45" oninput="setOpacity('zonebase',this.value)">
+          <span class="val" id="opaval-zonebase">45%</span>
+        </div>
+      </div>
+
+      <!-- ▼▼ 修正 P4（部分）：新增非都市土地使用分區圖（WMTS 版） ▼▼ -->
       <div class="layer" onclick="toggleLayer('nurban')">
-        <div class="lbl"><div class="dot" style="background:#f687b3;"></div><span>非都市土地使用分區</span></div>
+        <div class="lbl"><div class="dot" style="background:#f687b3;"></div><span>非都市分區（官方圖磚）</span></div>
         <div class="tog" id="tog-nurban"></div>
       </div>
       <div class="opa">
@@ -203,6 +220,19 @@
         <div class="lbl"><div class="dot" style="background:#fc8181;"></div><span>成交標記</span></div>
         <div class="tog on" id="tog-markers"></div>
       </div>
+
+      <!-- ★ C-1②/C-2：成交點分色模式切換 -->
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">成交點顏色依據</div>
+        <div style="display:flex;gap:6px;">
+          <button id="cm-price" class="cmbtn on" onclick="setColorMode('price')">依價格</button>
+          <button id="cm-zone"  class="cmbtn"    onclick="setColorMode('zone')">依分區</button>
+        </div>
+        <div id="zoneLegend" style="display:none;margin-top:8px;font-size:11.5px;line-height:1.9;">
+          <span style="color:#e05a4c;">●</span> 商業　<span style="color:#e8c33c;">●</span> 住宅　<span style="color:#8a7fd0;">●</span> 工業<br>
+          <span style="color:#5aa86a;">●</span> 農地　<span style="color:#8a97a5;">●</span> 其他
+        </div>
+      </div>
     </div>
 
     <div class="sec">
@@ -213,6 +243,8 @@
         <div class="stat"><div class="v" id="s-hi" style="color:var(--hi);">-</div><div class="l">最高單價</div></div>
         <div class="stat"><div class="v" id="s-lo" style="color:var(--lo);">-</div><div class="l">最低單價</div></div>
       </div>
+      <!-- ★ C-2：各分區平均單價 -->
+      <div id="zonePriceBox" style="margin-top:10px;font-size:12.5px;"></div>
     </div>
 
     <div class="sec"><h3>土地成交資料</h3></div>
@@ -335,7 +367,25 @@ const photoLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/Goo
   maxZoom: 20, opacity: 1, attribution: '&copy; NLSC 正射影像'
 });
 
+/* ★ C-1①：開放資料非都市分區底圖（自 GitHub 載入 GeoJSON）
+     來源：內政部國土管理署開放資料（政府資料開放授權，可商用）*/
+const ZONE_COLORS = {
+  '特定農業區':'#4e8a3c','一般農業區':'#7cb342','鄉村區':'#e0a53c','工業區':'#8a7fd0',
+  '森林區':'#2e7d32','山坡地保育區':'#8d9440','風景區':'#26a69a','特定專用區':'#ec9a5c',
+  '國家公園區':'#00897b','河川區':'#4a90d9'
+};
+const zoneBaseLayer = L.geoJSON(null, {
+  style: f => ({ fillColor: ZONE_COLORS[f.properties.zone] || '#aaa', weight: 0.5, color: '#fff', fillOpacity: 0.45 }),
+  onEachFeature: (f,l) => l.bindPopup('<div class="pop-title">'+f.properties.town+'</div><div class="pop-row"><span class="pop-lbl">非都市分區</span><span class="pop-val">'+f.properties.zone+'</span></div>')
+});
+// 從同 repo 載入（與 index.html 同層）
+fetch('kh_zone.geojson')
+  .then(r => r.json())
+  .then(gj => { zoneBaseLayer.addData(gj); if (layers.zonebase.active) zoneBaseLayer.addTo(map); })
+  .catch(e => console.warn('分區底圖載入失敗:', e));
+
 const layers = {
+  zonebase: { layer: zoneBaseLayer, active: false },
   luimap:   { layer: luimapLayer,   active: true  },
   nurban:   { layer: nurbanLayer,   active: false },
   landsect: { layer: landsectLayer, active: true  },
@@ -344,9 +394,20 @@ const layers = {
   markers:  { active: true }
 };
 
+/* ★ C-1②/C-2：成交點分區分色 */
+const CAT_COLORS = { '商業':'#e05a4c','住宅':'#e8c33c','工業':'#8a7fd0','農地':'#5aa86a','其他':'#8a97a5','未分類':'#3d4753' };
+function zoneCat(z){ z=String(z||''); if(!z)return'未分類'; if(z.includes('商'))return'商業'; if(z.includes('住'))return'住宅'; if(z.includes('工'))return'工業'; if(z.includes('農'))return'農地'; return'其他'; }
+let colorMode = 'price';   // 'price' 依價格 / 'zone' 依分區
+function setColorMode(m){ colorMode=m; document.getElementById('cm-price').classList.toggle('on',m==='price'); document.getElementById('cm-zone').classList.toggle('on',m==='zone'); createMarkers(allData); document.getElementById('zoneLegend').style.display = m==='zone'?'block':'none'; }
+
 // 透明度滑桿
 function setOpacity(name, v){
-  layers[name].layer.setOpacity(v / 100);
+  const lyr = layers[name].layer;
+  if (typeof lyr.setOpacity === 'function') {
+    lyr.setOpacity(v / 100);            // tileLayer / WMS
+  } else if (typeof lyr.setStyle === 'function') {
+    lyr.setStyle({ fillOpacity: v / 100 });  // GeoJSON（分區底圖）
+  }
   document.getElementById('opaval-' + name).textContent = v + '%';
 }
 
@@ -405,7 +466,8 @@ function createMarkers(data) {
   markerGroup.clearLayers();
   data.forEach((d) => {
     if (!d.lat || !d.lng || d.lat === 0) return;
-    const color = getColor(d.unitPrice);
+    // 依模式決定顏色：價格 or 分區
+    const color = colorMode === 'zone' ? (CAT_COLORS[zoneCat(d.zoning)] || '#8a97a5') : getColor(d.unitPrice);
     const icon = L.divIcon({
       className: 'custom-marker',
       html: `<div style="width:14px;height:14px;background:${color};border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px ${color}80;"></div>`,
@@ -459,6 +521,15 @@ function updateStats(data) {
   document.getElementById('s-avg').textContent = prices.length ? (prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(1) : '-';
   document.getElementById('s-hi').textContent  = prices.length ? Math.max(...prices).toFixed(1) : '-';
   document.getElementById('s-lo').textContent  = prices.length ? Math.min(...prices).toFixed(1) : '-';
+
+  // ★ C-2：各分區平均單價
+  const byCat = {};
+  data.forEach(d => { if(d.unitPrice>0){ const c=zoneCat(d.zoning); (byCat[c]=byCat[c]||[]).push(d.unitPrice); } });
+  const order=['商業','住宅','工業','農地','其他'];
+  let html='';
+  order.forEach(c => { if(byCat[c]&&byCat[c].length){ const avg=(byCat[c].reduce((a,b)=>a+b,0)/byCat[c].length).toFixed(1);
+    html+='<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line);"><span><span style="color:'+CAT_COLORS[c]+';">●</span> '+c+' <span style="color:var(--muted);">('+byCat[c].length+')</span></span><b>'+avg+' 萬/坪</b></div>'; }});
+  document.getElementById('zonePriceBox').innerHTML = html ? '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">各分區平均單價</div>'+html : '';
 }
 
 function flyTo(lat, lng) {
