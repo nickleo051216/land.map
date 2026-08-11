@@ -464,8 +464,21 @@ function getPrCls(p) { return p >= 20 ? 'hi' : p >= 10 ? 'mid' : 'lo'; }
 
 function createMarkers(data) {
   markerGroup.clearLayers();
+  /* ★ 座標完全重複的點會疊在一起（例如同段兩筆共用座標），
+     這裡以極小角度散開，讓每一筆都點得到。
+     位移量約 8 公尺，僅為可視化用途，不影響原始資料。 */
+  const seen = {};
   data.forEach((d) => {
     if (!d.lat || !d.lng || d.lat === 0) return;
+    const key = d.lat + ',' + d.lng;
+    seen[key] = (seen[key] || 0) + 1;
+    if (seen[key] > 1) {
+      const i = seen[key] - 1, ang = i * 2.399963;   // 黃金角，均勻散開
+      d = Object.assign({}, d, {
+        lat: d.lat + 0.00007 * Math.cos(ang) * Math.sqrt(i),
+        lng: d.lng + 0.00007 * Math.sin(ang) * Math.sqrt(i)
+      });
+    }
     // 依模式決定顏色：價格 or 分區
     const color = colorMode === 'zone' ? (CAT_COLORS[zoneCat(d.zoning)] || '#8a97a5') : getColor(d.unitPrice);
     const icon = L.divIcon({
@@ -499,10 +512,12 @@ function createMarkers(data) {
 }
 
 function renderCards(data) {
-  document.getElementById('cardList').innerHTML = data.map((d) => `
-    <div class="card" onclick="flyTo(${d.lat},${d.lng})">
+  if (!data.length) { document.getElementById('cardList').innerHTML =
+    '<div style="padding:14px;color:#7d8b98;font-size:12.5px;">沒有符合的資料</div>'; return; }
+  document.getElementById('cardList').innerHTML = data.map((d, idx) => `
+    <div class="card" onclick="flyTo(${d.lat},${d.lng})" title="點擊跳到地圖位置">
       <div class="top">
-        <div class="addr">${d.section || ''}${d.landNumber ? ' ' + d.landNumber : ''}</div>
+        <div class="addr"><span style="display:inline-block;min-width:18px;color:#58a6ff;font-weight:700;">${idx+1}.</span>${d.section || ''}${d.landNumber ? ' ' + d.landNumber : ''}</div>
         <div class="pr ${getPrCls(d.unitPrice)}">${d.unitPrice || '?'}萬/坪</div>
       </div>
       <div class="meta">
@@ -510,6 +525,7 @@ function renderCards(data) {
         <span class="tag">${d.area || '?'}坪</span>
         <span class="tag">${d.zoning || ''}</span>
         <span class="tag">${d.date || ''}</span>
+        <span class="tag" style="background:rgba(88,166,255,.15);color:#58a6ff;">總價 ${d.totalPrice || '?'} 萬</span>
       </div>
     </div>
   `).join('');
@@ -636,10 +652,23 @@ if (encodedData) {
 }
 else if (apiUrl) {
   document.getElementById('loading').classList.add('show');
-  fetch(apiUrl + '?lat=' + qLat + '&lng=' + qLng + '&district=' + encodeURIComponent(qDistrict) + '&section=' + encodeURIComponent(qSection))
-    .then(r => r.json())
-    .then(data => loadData((data.nearby || data).map(mapRow)))
-    .catch(e => { console.error('API error:', e); document.getElementById('loading').classList.remove('show'); });
+  const reqUrl = apiUrl + '?lat=' + qLat + '&lng=' + qLng + '&district=' + encodeURIComponent(qDistrict) + '&section=' + encodeURIComponent(qSection);
+  document.getElementById('cardList').innerHTML = '<div style="padding:14px;color:#7d8b98;font-size:12.5px;">📡 讀取資料中…</div>';
+  fetch(reqUrl)
+    .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(data => {
+      const rows = (data.nearby || data);
+      if (!Array.isArray(rows)) throw new Error('回傳格式不是陣列');
+      loadData(rows.map(mapRow));
+    })
+    .catch(e => {
+      console.error('API error:', e);
+      document.getElementById('loading').classList.remove('show');
+      /* ★ 把錯誤顯示在畫面上，不再只躲在 console 裡 */
+      document.getElementById('cardList').innerHTML =
+        '<div style="padding:14px;color:#f85149;font-size:12.5px;line-height:1.7;">'
+        + '⚠️ 資料載入失敗<br><span style="color:#7d8b98;font-size:11.5px;">' + e.message + '</span></div>';
+    });
 }
 else {
   loadData([]);
