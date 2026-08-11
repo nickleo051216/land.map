@@ -139,7 +139,7 @@
       <h3>搜尋地段</h3>
       <div class="search">
         <span>🔍</span>
-        <input type="text" id="searchInput" placeholder="輸入地段或地號，例如：溪洲段..." oninput="filterData(this.value)">
+        <input type="text" id="searchInput" placeholder="輸入地段/地號/分區，例如：鳳山段" oninput="filterData(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();filterData(this.value);}">
       </div>
     </div>
 
@@ -554,13 +554,31 @@ function toggleLayer(name) {
 }
 
 function filterData(q) {
-  q = q.toLowerCase();
+  /* ★ 修正：API 模式下資料是非同步載入的。
+     若使用者在資料回來前就打字，allData 還是空陣列，
+     篩出來 0 筆 → 畫面全空，看起來像「搜尋壞掉」。
+     這裡加保護：資料還沒到就提示稍候，不要把畫面清空。 */
+  if (!allData || allData.length === 0) {
+    const el = document.getElementById('cardList');
+    if (el) el.innerHTML = '<div style="padding:14px;color:#7d8b98;font-size:13px;">資料載入中，請稍候再搜尋…</div>';
+    return;
+  }
+  q = (q || '').trim().toLowerCase();
+  if (!q) {                       // 清空搜尋 → 還原全部
+    createMarkers(allData); renderCards(allData); updateStats(allData);
+    return;
+  }
   const filtered = allData.filter(d =>
     (d.section||'').toLowerCase().includes(q) ||
     (d.landNumber||'').toLowerCase().includes(q) ||
-    (d.district||'').toLowerCase().includes(q)
+    (d.district||'').toLowerCase().includes(q) ||
+    (d.zoning||'').toLowerCase().includes(q)     // ★ 順便支援用分區搜尋
   );
   createMarkers(filtered); renderCards(filtered); updateStats(filtered);
+  if (filtered.length === 0) {
+    document.getElementById('cardList').innerHTML =
+      '<div style="padding:14px;color:#7d8b98;font-size:13px;">找不到「' + q + '」<br><span style="font-size:11.5px;">試試地段名、地號、行政區或分區</span></div>';
+  }
 }
 
 function loadData(data) {
