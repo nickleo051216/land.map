@@ -106,9 +106,41 @@
   .pop-hint{margin-top:8px;font-size:10.5px;color:var(--t3);line-height:1.5;border-top:1px solid rgba(255,255,255,.08);padding-top:6px;}
 
   @media(max-width:768px){
-    .app{grid-template-columns:1fr;grid-template-rows:auto 50vh 1fr;}
-    .side{order:3;} .hdr .right{display:none;}
+    /* ★ 手機版重寫：原本定義 3 列卻只有 2 個子元素，加上 order:3，版面會錯亂。
+       改成「地圖滿版 + 由下往上的抽屜側欄」，符合手機使用習慣。 */
+    .app{ grid-template-columns:1fr; grid-template-rows:auto 1fr; height:100vh; height:100dvh; }
+    .hdr{ padding:8px 12px; }
+    .hdr .right{ display:none; }
+    .hdr h1{ font-size:14px; }
+    .hdr .sub{ display:none; }
+    #map{ height:100%; width:100%; }
+
+    .side{
+      position:fixed; left:0; right:0; bottom:0; top:auto;
+      height:74vh; height:74dvh;
+      border-right:none; border-top:1px solid var(--border);
+      border-radius:16px 16px 0 0;
+      box-shadow:0 -8px 28px rgba(0,0,0,.5);
+      transform:translateY(calc(100% - 54px));
+      transition:transform .28s ease;
+      z-index:1200;
+    }
+    .side.open{ transform:translateY(0); }
+    .drawer-tab{
+      display:flex; align-items:center; justify-content:center;
+      height:54px; flex:none; cursor:pointer;
+      font-size:13.5px; font-weight:700; color:var(--muted);
+      border-bottom:1px solid var(--border); position:relative;
+    }
+    .drawer-tab::before{
+      content:''; position:absolute; top:7px; left:50%; transform:translateX(-50%);
+      width:44px; height:4px; border-radius:3px; background:#4a5563;
+    }
+    .side .sec{ padding:12px; }
+    .layer{ font-size:13px; }
+    .stat .v{ font-size:18px; }
   }
+  @media(min-width:769px){ .drawer-tab{ display:none; } }
 
 .cmbtn{flex:1;padding:6px 0;font-size:12px;background:var(--panel,#1c2330);color:var(--muted,#9fb0c0);border:1px solid var(--line,#2b3441);border-radius:7px;cursor:pointer;transition:.15s;}
 .cmbtn.on{background:#58a6ff;color:#0d1117;border-color:#58a6ff;font-weight:700;}
@@ -134,13 +166,14 @@
     </div>
   </div>
 
-  <div class="side">
+  <div class="side" id="sideDrawer">
+      <div class="drawer-tab" onclick="toggleDrawer()"><span id="drawerLabel">▲ 展開搜尋與圖層</span></div>
     <div class="sec">
       <h3>搜尋地段</h3>
       <div style="font-size:11px;color:#6a7686;margin-bottom:6px;line-height:1.6;">打字＝在目前結果中過濾｜按 <b style="color:#58a6ff;">Enter</b>＝查詢新地段</div>
       <div class="search">
         <span>🔍</span>
-        <input type="text" id="searchInput" placeholder="輸入地段按 Enter 查詢，例如：溪州段" oninput="filterData(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();searchNewSection(this.value);}">
+        <input type="text" id="searchInput" placeholder="輸入地段按 Enter 查詢，例如：昭明段" oninput="filterData(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();searchNewSection(this.value);}">
       </div>
     </div>
 
@@ -301,7 +334,8 @@ const qLat      = parseFloat(params.get('lat')) || 22.505;
 const qLng      = parseFloat(params.get('lng')) || 120.395;
 const qSection  = decodeURIComponent(params.get('section') || '');
 const qLandNum  = decodeURIComponent(params.get('landNumber') || '');
-const apiUrl    = params.get('api') || '';
+const API_FALLBACK = 'https://nickleo9.zeabur.app/webhook/land-map-api';
+const apiUrl    = params.get('api') || API_FALLBACK;   // ★ 沒帶 api= 也能用搜尋
 
 // ★ P2 修正：不再硬寫死「林園區」
 const paramDistrict  = decodeURIComponent(params.get('district') || '').trim();
@@ -314,7 +348,7 @@ const districtMismatch = !!(paramDistrict && lookupDistrict && paramDistrict !==
 let allData = [];
 
 // === 地圖初始化 ===
-const map = L.map('map', { center: [qLat, qLng], zoom: 16, zoomControl: true });
+const map = window.map = L.map('map', { center: [qLat, qLng], zoom: 16, zoomControl: true });
 
 /* ★ P3 修正：原本底圖是 CARTO dark_all（純黑底），
      一旦關掉國土利用圖就整片漆黑。改為預設淺色 Positron，並可切換。*/
@@ -550,6 +584,10 @@ function updateStats(data) {
 }
 
 function flyTo(lat, lng) {
+  if (window.innerWidth <= 768) {          // 手機：點清單後收起抽屜才看得到地圖
+    const s = document.getElementById('sideDrawer');
+    if (s && s.classList.contains('open')) toggleDrawer();
+  }
   if (!lat || !lng) return;
   map.flyTo([lat, lng], 18, { duration: 0.8 });
   markerGroup.eachLayer(m => {
@@ -574,6 +612,33 @@ function toggleLayer(name) {
 /* ★ 搜尋升級：按 Enter = 向 API 查詢「新地段」（不再只是過濾目前結果）
    原本搜尋只在已載入的資料裡過濾，使用者打「溪州段」但目前載入的是「鳳山段」，
    自然 0 筆，看起來像壞掉。現在 Enter 會真的去查那個地段。 */
+/* 搜尋結果橫幅：顯示在搜尋框正下方，避免使用者看不到回饋 */
+/* 手機抽屜開合 */
+function toggleDrawer(){
+  const s = document.getElementById('sideDrawer');
+  const l = document.getElementById('drawerLabel');
+  if (!s) return;
+  s.classList.toggle('open');
+  if (l) l.textContent = s.classList.contains('open') ? '▼ 收起' : '▲ 展開搜尋與圖層';
+  setTimeout(function(){ if (window.map && window.map.invalidateSize) window.map.invalidateSize(); }, 300);
+}
+
+function showSearchNote(msg, color){
+  let el = document.getElementById('searchNote');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'searchNote';
+    el.style.cssText = 'margin-top:8px;padding:8px 10px;border-radius:7px;font-size:12px;line-height:1.5;';
+    const inp = document.getElementById('searchInput');
+    if (inp && inp.parentNode) inp.parentNode.appendChild(el);
+  }
+  el.style.display = 'block';
+  el.style.background = color + '22';
+  el.style.border = '1px solid ' + color + '55';
+  el.style.color = color;
+  el.innerHTML = msg;
+}
+
 function searchNewSection(q){
   q = (q || '').trim();
   if (!q) return;
@@ -583,6 +648,7 @@ function searchNewSection(q){
   }
   const list = document.getElementById('cardList');
   list.innerHTML = '<div style="padding:14px;color:#7d8b98;font-size:12.5px;">🔍 查詢「' + q + '」中…</div>';
+  showSearchNote('🔍 查詢「' + q + '」中…', '#58a6ff');
   document.getElementById('loading').classList.add('show');
   const isSection = /段$/.test(q);     // 「溪州段」當地段查；其他當行政區查
   const url = apiUrl + '?' + (isSection ? 'section=' : 'district=') + encodeURIComponent(q) + '&limit=50';
@@ -595,17 +661,29 @@ function searchNewSection(q){
         list.innerHTML = '<div style="padding:14px;color:#e0a53c;font-size:12.5px;line-height:1.7;">'
           + '查無「' + q + '」的成交資料<br><span style="color:#7d8b98;font-size:11.5px;">'
           + '試試其他地段名（例如：鳳山段、昭明段），或輸入行政區（例如：大寮區）</span></div>';
+        showSearchNote('⚠️ 查無「' + q + '」，資料庫沒有這個地段', '#e0a53c');
         return;
       }
       loadData(rows.map(mapRow));
-      // 更新上方查詢資訊
+      /* ★ 更新上方「查詢資訊」面板（原本誤用了不存在的 qInfo，導致畫面看不出有換） */
       const info = data.query || {};
-      const t = document.getElementById('qInfo');
-      if (t && info.section) t.innerHTML = '行政區：' + (info.district||'') + '<br>地段：' + info.section;
+      const sec  = document.getElementById('queryInfoSec');
+      const box  = document.getElementById('queryInfo');
+      if (sec) sec.style.display = 'block';
+      if (box) box.innerHTML =
+        '<div class="qi-title">📍 查詢資訊</div>' +
+        '行政區：<strong>' + (info.district || '—') + '</strong><br>' +
+        '地段：<strong>' + (info.section || q) + '</strong><br>' +
+        '筆數：<strong style="color:#58a6ff;">' + rows.length + ' 筆</strong>';
+      /* 搜尋結果橫幅：就在搜尋框下方，一眼看得到 */
+      showSearchNote('✅ 已切換到「' + (info.section || q) + '」，共 ' + rows.length + ' 筆', '#3fb950');
+      /* 地圖移到新地段中心 */
+      if (info.lat && info.lng) map.setView([info.lat, info.lng], 15);
     })
     .catch(e => {
       document.getElementById('loading').classList.remove('show');
       list.innerHTML = '<div style="padding:14px;color:#f85149;font-size:12.5px;">⚠️ 查詢失敗<br><span style="color:#7d8b98;font-size:11.5px;">'+e.message+'</span></div>';
+      showSearchNote('⚠️ 查詢失敗：' + e.message, '#f85149');
     });
 }
 
