@@ -432,9 +432,9 @@ function applyLuiFilter(){
 
 /* ★ 新增：非都市土地使用分區圖（nURBAN1）
      這是客戶說的「國土測繪雲版本」裡的其中一層，已驗證可用 */
-const /* ★ 客戶回饋：此層與「國土利用現況」配色相近，同時開啟時無法分辨。
+/* ★ 客戶回饋：此層與「國土利用現況」配色相近，同時開啟時無法分辨。
    改以 CSS filter 轉成高對比外框樣式，兩層視覺上徹底區隔。 */
-nurbanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/nURBAN1/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+const nurbanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/nURBAN1/default/GoogleMapsCompatible/{z}/{y}/{x}', {
   maxZoom:20, opacity:0.85, className:'nurban-outline',
   attribution:'&copy; NLSC 非都市土地使用分區圖'
 });
