@@ -353,7 +353,7 @@ const apiUrl    = params.get('api') || API_FALLBACK;   // ★ 沒帶 api= 也能
 // ★ P2 修正：不再硬寫死「林園區」
 const paramDistrict  = decodeURIComponent(params.get('district') || '').trim();
 const lookupDistrict = SECTION_DISTRICT[qSection] || '';
-const qDistrict      = paramDistrict || lookupDistrict || '';
+let qDistrict      = paramDistrict || lookupDistrict || '';   // ★ 改 let：搜尋/拖曳後需更新
 
 // 若 n8n 傳來的行政區 與 對照表不符 → 提示，不靜靜地顯示錯的
 const districtMismatch = !!(paramDistrict && lookupDistrict && paramDistrict !== lookupDistrict);
@@ -478,10 +478,30 @@ const targetIcon = L.divIcon({
 });
 const targetMarker = L.marker([qLat, qLng], { icon: targetIcon, draggable: true }).addTo(map);
 
+/* ★ 由最近的成交點反推行政區／地段（不需額外 API 呼叫）
+   用途：①網址沒帶 district ②使用者拖曳標記後位置改變 */
+function nearestInfo(lat, lng){
+  if (!allData || !allData.length) return null;
+  let best=null, bestD=Infinity;
+  allData.forEach(d=>{
+    if(!d.lat||!d.lng) return;
+    const dx=(d.lat-lat), dy=(d.lng-lng);
+    const dist=dx*dx+dy*dy;
+    if(dist<bestD){ bestD=dist; best=d; }
+  });
+  if(!best) return null;
+  // 約略換算公里（1 度 ≈ 111km）
+  return { district: best.district||'', section: best.section||'', km: Math.sqrt(bestD)*111 };
+}
+
 function targetPopupHtml(lat, lng){
   return `
   <div class="pop-title">📍 查詢目標</div>
-  <div class="pop-row"><span class="pop-lbl">行政區</span><span class="pop-val">${qDistrict || '—'}</span></div>
+  <div class="pop-row"><span class="pop-lbl">行政區</span><span class="pop-val">${(function(){
+     if (qDistrict) return qDistrict;
+     const n = nearestInfo(lat, lng);
+     return n && n.district ? n.district + '（依最近成交點推估）' : '—';
+   })()}</span></div>
   ${qSection ? `<div class="pop-row"><span class="pop-lbl">地段</span><span class="pop-val">${qSection}</span></div>` : ''}
   ${qLandNum ? `<div class="pop-row"><span class="pop-lbl">地號</span><span class="pop-val">${qLandNum}</span></div>` : ''}
   <div class="pop-row"><span class="pop-lbl">座標</span><span class="pop-val">${lat.toFixed(5)}, ${lng.toFixed(5)}</span></div>
@@ -495,6 +515,13 @@ targetMarker.on('dragend', function(){
   targetMarker.setPopupContent(targetPopupHtml(p.lat, p.lng)).openPopup();
   const el = document.getElementById('coordLine');
   if (el) el.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}（已手動校正）`;
+  /* ★ 拖曳後同步更新側欄的行政區（依最近成交點推估） */
+  const n = nearestInfo(p.lat, p.lng);
+  const dEl = document.getElementById('districtLine');
+  if (dEl && n && n.district) {
+    dEl.innerHTML = '<strong>' + n.district + '</strong>' +
+      '<span style="color:#7d8b98;font-size:11px;">（依最近成交點推估）</span>';
+  }
 });
 
 // 顯示查詢資訊
@@ -502,7 +529,10 @@ if (qSection || qDistrict || qLandNum) {
   document.getElementById('queryInfoSec').style.display = 'block';
   document.getElementById('queryInfo').innerHTML = `
     <div class="qi-title">📍 查詢資訊</div>
-    行政區：<strong>${qDistrict || '—'}</strong><br>
+    行政區：<span id="districtLine"><strong>${qDistrict || (function(){
+      const n = nearestInfo(qLat, qLng);
+      return n && n.district ? n.district + '<span style="color:#7d8b98;font-size:11px;">（依最近成交點推估）</span>' : '—';
+    })()}</strong></span><br>
     ${qSection ? '地段：<strong>' + qSection + '</strong><br>' : ''}
     ${qLandNum ? '地號：<strong>' + qLandNum + '</strong><br>' : ''}
     座標：<span id="coordLine">${qLat.toFixed(5)}, ${qLng.toFixed(5)}</span>
@@ -692,6 +722,7 @@ function searchNewSection(q){
       loadData(rows.map(mapRow));
       /* ★ 更新上方「查詢資訊」面板（原本誤用了不存在的 qInfo，導致畫面看不出有換） */
       const info = data.query || {};
+      if (info.district) qDistrict = info.district;   // ★ 更新全域，popup 才會跟著對
       const sec  = document.getElementById('queryInfoSec');
       const box  = document.getElementById('queryInfo');
       if (sec) sec.style.display = 'block';
