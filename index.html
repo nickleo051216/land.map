@@ -248,12 +248,14 @@
 
       <!-- ▼▼ 修正 P6：誠實標示這是「段籍圖」而非地號邊界 ▼▼ -->
       
-<div id="luiLegend" style="display:none;margin-top:8px;padding:8px 10px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:11px;line-height:1.9;">
-  <div style="color:#9fb0c0;margin-bottom:4px;font-weight:700;">國土利用現況 — 九大類</div>
-  <div><span style="color:#8bc34a;">■</span> 1 農業　<span style="color:#2e7d32;">■</span> 2 森林　<span style="color:#9e9e9e;">■</span> 3 交通</div>
-  <div><span style="color:#4a90d9;">■</span> 4 水利　<span style="color:#e05a4c;">■</span> 5 建築　<span style="color:#ab47bc;">■</span> 6 公共</div>
-  <div><span style="color:#26a69a;">■</span> 7 遊憩　<span style="color:#8d6e63;">■</span> 8 礦鹽　<span style="color:#bdbdbd;">■</span> 9 其他</div>
-  <div style="color:#7d8b98;margin-top:5px;font-size:10.5px;">※ 此為「土地現況用途」，非都市計畫法定分區。<br>要看住宅／商業分區，請用下方「成交點顏色依據 → 依分區」。</div>
+<div id="luiLegend" style="display:none;margin-top:8px;padding:9px 10px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:11.5px;">
+  <div style="color:#9fb0c0;margin-bottom:6px;font-weight:700;display:flex;justify-content:space-between;align-items:center;">
+    <span>國土利用現況 — 點選篩選</span>
+    <span style="font-size:10px;cursor:pointer;color:#58a6ff;" onclick="luiAll()">全選</span>
+  </div>
+  <div id="luiCats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;"></div>
+  <div style="color:#7d8b98;margin-top:7px;font-size:10.5px;line-height:1.6;">※ 此為「土地現況用途」，非都市計畫法定分區。<br>要看住宅／商業分區，請用下方「成交點顏色依據 → 依分區」。</div>
+</div>
 </div>
       <div id="layerWarn">⚠️ 「國土利用現況」與「非都市分區」皆為土地使用圖資，同時開啟會重疊。建議擇一開啟以便判讀。</div>
       <div class="layer" onclick="toggleLayer('landsect')">
@@ -401,10 +403,32 @@ const emapLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP2/default/Googl
 });
 
 // 國土利用現況調查成果圖（分區顏色）— 預設 50% 透明
+/* ★ 國土利用現況：九大類各有獨立 WMS 圖層，可單獨篩選
+   官方配色實測取得，非自行指定 */
+const LUI_CATS = [
+  { id:'01', name:'農業', color:'#63c03b' },
+  { id:'02', name:'森林', color:'#38a800' },
+  { id:'03', name:'交通', color:'#b0579e' },
+  { id:'04', name:'水利', color:'#7ad8fa' },
+  { id:'05', name:'建築', color:'#fff429' },
+  { id:'06', name:'公共', color:'#da81ff' },
+  { id:'07', name:'遊憩', color:'#93ff2f' },
+  { id:'08', name:'礦鹽', color:'#bc923e' },
+  { id:'09', name:'其他', color:'#bc923e' }
+];
+const luiActive = new Set(LUI_CATS.map(c => c.id));   // 預設全選
 const luimapLayer = L.tileLayer.wms('https://wms.nlsc.gov.tw/wms', {
   layers:'LUIMAP', format:'image/png', transparent:true, opacity:0.5, maxZoom:20,
   attribution:'&copy; NLSC 國土利用現況調查成果圖'
-});   // ★ 預設不掛上地圖
+});
+/* 依勾選的類別重建 WMS layers 參數；全選時用合併圖層 LUIMAP（較快） */
+function applyLuiFilter(){
+  const sel = LUI_CATS.filter(c => luiActive.has(c.id));
+  if (!sel.length){ luimapLayer.setParams({ layers:'LUIMAP' }); if(map.hasLayer(luimapLayer)) map.removeLayer(luimapLayer); return; }
+  if (layers.luimap.active && !map.hasLayer(luimapLayer)) map.addLayer(luimapLayer);
+  const val = (sel.length === LUI_CATS.length) ? 'LUIMAP' : sel.map(c => 'LUIMAP'+c.id).join(',');
+  luimapLayer.setParams({ layers: val });
+}
 
 /* ★ 新增：非都市土地使用分區圖（nURBAN1）
      這是客戶說的「國土測繪雲版本」裡的其中一層，已驗證可用 */
@@ -462,10 +486,37 @@ function setColorMode(m){ colorMode=m; document.getElementById('cm-price').class
 
 // 透明度滑桿
 /* ★ 兩個土地使用圖層同時開啟時提示（客戶回饋：顏色太繽紛、分不出來） */
+/* ★ 國土利用現況：類別篩選 UI */
+function buildLuiCats(){
+  const box=document.getElementById('luiCats');
+  if(!box||box.dataset.built) return;
+  box.dataset.built='1';
+  LUI_CATS.forEach(c=>{
+    const el=document.createElement('div');
+    el.className='lui-cat on';
+    el.dataset.id=c.id;
+    el.style.cssText='display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:5px;cursor:pointer;border:1px solid transparent;user-select:none;';
+    el.innerHTML='<span style="width:11px;height:11px;border-radius:2px;background:'+c.color+';border:1px solid rgba(0,0,0,.3);flex:none;"></span><span style="font-size:11px;">'+c.name+'</span>';
+    el.onclick=()=>{
+      if(luiActive.has(c.id)){ luiActive.delete(c.id); el.style.opacity='.3'; }
+      else { luiActive.add(c.id); el.style.opacity='1'; }
+      applyLuiFilter();
+    };
+    box.appendChild(el);
+  });
+}
+function luiAll(){
+  LUI_CATS.forEach(c=>luiActive.add(c.id));
+  document.querySelectorAll('#luiCats > div').forEach(el=>el.style.opacity='1');
+  applyLuiFilter();
+}
+
 function checkLayerOverlap(){
   /* ★ 國土利用現況開啟時，顯示九大類圖例（客戶：不知道顏色代表什麼） */
   const lg = document.getElementById('luiLegend');
-  if (lg) lg.style.display = (layers.luimap && layers.luimap.active) ? 'block' : 'none';
+  const on = layers.luimap && layers.luimap.active;
+  if (lg) lg.style.display = on ? 'block' : 'none';
+  if (on) buildLuiCats();
   const w = document.getElementById('layerWarn');
   if (!w) return;
   const both = layers.luimap && layers.luimap.active && layers.nurban && layers.nurban.active;
