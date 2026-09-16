@@ -145,6 +145,18 @@
 .cmbtn{flex:1;padding:6px 0;font-size:12px;background:var(--panel,#1c2330);color:var(--muted,#9fb0c0);border:1px solid var(--line,#2b3441);border-radius:7px;cursor:pointer;transition:.15s;}
 .cmbtn.on{background:#58a6ff;color:#0d1117;border-color:#58a6ff;font-weight:700;}
 .cmbtn:hover{border-color:#58a6ff;}
+
+/* ★ 非都市分區圖層：轉為高對比外框樣式，避免與國土利用現況混淆 */
+.nurban-outline{
+  filter: grayscale(1) contrast(2.6) brightness(1.25);
+  mix-blend-mode: multiply;
+}
+/* 兩層同時開啟時的提示 */
+#layerWarn{
+  display:none; margin:8px 0 2px; padding:8px 10px; border-radius:7px;
+  background:rgba(224,165,60,.12); border:1px solid rgba(224,165,60,.35);
+  color:#e0a53c; font-size:11.5px; line-height:1.6;
+}
 </style>
 </head>
 <body>
@@ -196,7 +208,7 @@
       <h3>圖層控制</h3>
 
       <div class="layer" onclick="toggleLayer('luimap')">
-        <div class="lbl"><div class="dot" style="background:#f6ad55;"></div><span>國土利用圖（分區顏色）</span></div>
+        <div class="lbl"><div class="dot" style="background:#f6ad55;"></div><span title="內政部「國土利用現況調查」，顯示土地目前的實際使用狀況（建地、農地、水域等），非都市計畫法定分區">國土利用現況 ⓘ</span></div>
         <div class="tog on" id="tog-luimap"></div>
       </div>
       <!-- ▼▼ 修正 P5 / P8-3：透明度滑桿，預設 50% ▼▼ -->
@@ -223,7 +235,7 @@
 
       <!-- ▼▼ 修正 P4（部分）：新增非都市土地使用分區圖（WMTS 版） ▼▼ -->
       <div class="layer" onclick="toggleLayer('nurban')">
-        <div class="lbl"><div class="dot" style="background:#f687b3;"></div><span>非都市分區（官方圖磚）</span></div>
+        <div class="lbl"><div class="dot" style="background:#f687b3;"></div><span title="非都市土地使用分區（農業區、鄉村區、工業區等），以外框線顯示">非都市分區（外框）</span></div>
         <div class="tog" id="tog-nurban"></div>
       </div>
       <div class="opa">
@@ -235,6 +247,7 @@
       </div>
 
       <!-- ▼▼ 修正 P6：誠實標示這是「段籍圖」而非地號邊界 ▼▼ -->
+      <div id="layerWarn">⚠️ 「國土利用現況」與「非都市分區」皆為土地使用圖資，同時開啟會重疊。建議擇一開啟以便判讀。</div>
       <div class="layer" onclick="toggleLayer('landsect')">
         <div class="lbl"><div class="dot" style="background:#63b3ed;"></div><span>段籍圖（地段外圍）</span></div>
         <div class="tog on" id="tog-landsect"></div>
@@ -353,12 +366,12 @@ const map = window.map = L.map('map', { center: [qLat, qLng], zoom: 16, zoomCont
 /* ★ P3 修正：原本底圖是 CARTO dark_all（純黑底），
      一旦關掉國土利用圖就整片漆黑。改為預設淺色 Positron，並可切換。*/
 const baseMaps = {
-  light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-          { maxZoom:20, attribution:'&copy; OSM &copy; CARTO' }),
+  light: L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}',
+          { maxZoom:20, attribution:'&copy; 內政部國土測繪中心' }),
   gray:  L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP01/default/GoogleMapsCompatible/{z}/{y}/{x}',
           { maxZoom:20, attribution:'&copy; NLSC 電子地圖(灰階)' }),
-  dark:  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-          { maxZoom:20, attribution:'&copy; OSM &copy; CARTO' })
+  dark:  L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}',
+          { maxZoom:20, attribution:'&copy; 內政部國土測繪中心' })
 };
 let currentBase = 'light';
 baseMaps.light.addTo(map);
@@ -386,8 +399,11 @@ const luimapLayer = L.tileLayer.wms('https://wms.nlsc.gov.tw/wms', {
 
 /* ★ 新增：非都市土地使用分區圖（nURBAN1）
      這是客戶說的「國土測繪雲版本」裡的其中一層，已驗證可用 */
-const nurbanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/nURBAN1/default/GoogleMapsCompatible/{z}/{y}/{x}', {
-  maxZoom:20, opacity:0.5, attribution:'&copy; NLSC 非都市土地使用分區圖'
+const /* ★ 客戶回饋：此層與「國土利用現況」配色相近，同時開啟時無法分辨。
+   改以 CSS filter 轉成高對比外框樣式，兩層視覺上徹底區隔。 */
+nurbanLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/nURBAN1/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+  maxZoom:20, opacity:0.85, className:'nurban-outline',
+  attribution:'&copy; NLSC 非都市土地使用分區圖'
 });
 
 /* ★ P6 說明：LANDSECT 的官方名稱是「地段外圍圖（段籍圖）」，
@@ -436,6 +452,14 @@ let colorMode = 'price';   // 'price' 依價格 / 'zone' 依分區
 function setColorMode(m){ colorMode=m; document.getElementById('cm-price').classList.toggle('on',m==='price'); document.getElementById('cm-zone').classList.toggle('on',m==='zone'); createMarkers(allData); document.getElementById('zoneLegend').style.display = m==='zone'?'block':'none'; }
 
 // 透明度滑桿
+/* ★ 兩個土地使用圖層同時開啟時提示（客戶回饋：顏色太繽紛、分不出來） */
+function checkLayerOverlap(){
+  const w = document.getElementById('layerWarn');
+  if (!w) return;
+  const both = layers.luimap && layers.luimap.active && layers.nurban && layers.nurban.active;
+  w.style.display = both ? 'block' : 'none';
+}
+
 function setOpacity(name, v){
   const lyr = layers[name].layer;
   if (typeof lyr.setOpacity === 'function') {
@@ -605,6 +629,7 @@ function toggleLayer(name) {
     return;
   }
   info.active ? map.addLayer(info.layer) : map.removeLayer(info.layer);
+  checkLayerOverlap();
   if (info.active) baseMaps[currentBase].bringToBack();   // 確保底圖不會蓋住
 }
 
