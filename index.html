@@ -209,7 +209,7 @@
 
       <div class="layer" onclick="toggleLayer('luimap')">
         <div class="lbl"><div class="dot" style="background:#f6ad55;"></div><span title="內政部「國土利用現況調查」，顯示土地目前的實際使用狀況（建地、農地、水域等），非都市計畫法定分區">國土利用現況 ⓘ</span></div>
-        <div class="tog on" id="tog-luimap"></div>
+        <div class="tog" id="tog-luimap"></div>
       </div>
       <!-- ▼▼ 修正 P5 / P8-3：透明度滑桿，預設 50% ▼▼ -->
       <div class="opa">
@@ -247,6 +247,14 @@
       </div>
 
       <!-- ▼▼ 修正 P6：誠實標示這是「段籍圖」而非地號邊界 ▼▼ -->
+      
+<div id="luiLegend" style="display:none;margin-top:8px;padding:8px 10px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:11px;line-height:1.9;">
+  <div style="color:#9fb0c0;margin-bottom:4px;font-weight:700;">國土利用現況 — 九大類</div>
+  <div><span style="color:#8bc34a;">■</span> 1 農業　<span style="color:#2e7d32;">■</span> 2 森林　<span style="color:#9e9e9e;">■</span> 3 交通</div>
+  <div><span style="color:#4a90d9;">■</span> 4 水利　<span style="color:#e05a4c;">■</span> 5 建築　<span style="color:#ab47bc;">■</span> 6 公共</div>
+  <div><span style="color:#26a69a;">■</span> 7 遊憩　<span style="color:#8d6e63;">■</span> 8 礦鹽　<span style="color:#bdbdbd;">■</span> 9 其他</div>
+  <div style="color:#7d8b98;margin-top:5px;font-size:10.5px;">※ 此為「土地現況用途」，非都市計畫法定分區。<br>要看住宅／商業分區，請用下方「成交點顏色依據 → 依分區」。</div>
+</div>
       <div id="layerWarn">⚠️ 「國土利用現況」與「非都市分區」皆為土地使用圖資，同時開啟會重疊。建議擇一開啟以便判讀。</div>
       <div class="layer" onclick="toggleLayer('landsect')">
         <div class="lbl"><div class="dot" style="background:#63b3ed;"></div><span>段籍圖（地段外圍）</span></div>
@@ -348,7 +356,8 @@ const qLng      = parseFloat(params.get('lng')) || 120.395;
 const qSection  = decodeURIComponent(params.get('section') || '');
 const qLandNum  = decodeURIComponent(params.get('landNumber') || '');
 const API_FALLBACK = 'https://nickleo9.zeabur.app/webhook/land-map-api';
-const apiUrl    = params.get('api') || API_FALLBACK;   // ★ 沒帶 api= 也能用搜尋
+const apiUrl    = params.get('api') || API_FALLBACK;
+const GKEY      = params.get('gkey') || '';   // ★ 反向地理編碼用；由 Block B 傳入   // ★ 沒帶 api= 也能用搜尋
 
 // ★ P2 修正：不再硬寫死「林園區」
 const paramDistrict  = decodeURIComponent(params.get('district') || '').trim();
@@ -394,8 +403,8 @@ const emapLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP2/default/Googl
 // 國土利用現況調查成果圖（分區顏色）— 預設 50% 透明
 const luimapLayer = L.tileLayer.wms('https://wms.nlsc.gov.tw/wms', {
   layers:'LUIMAP', format:'image/png', transparent:true, opacity:0.5, maxZoom:20,
-  attribution:'&copy; NLSC 國土利用圖'
-}).addTo(map);
+  attribution:'&copy; NLSC 國土利用現況調查成果圖'
+});   // ★ 預設不掛上地圖
 
 /* ★ 新增：非都市土地使用分區圖（nURBAN1）
      這是客戶說的「國土測繪雲版本」裡的其中一層，已驗證可用 */
@@ -437,7 +446,7 @@ fetch('kh_zone.geojson')
 
 const layers = {
   zonebase: { layer: zoneBaseLayer, active: false },
-  luimap:   { layer: luimapLayer,   active: true  },
+  luimap:   { layer: luimapLayer,   active: false },   // ★ 客戶回饋「太繽紛」：改為預設關閉
   nurban:   { layer: nurbanLayer,   active: false },
   landsect: { layer: landsectLayer, active: true  },
   emap:     { layer: emapLayer,     active: false },
@@ -454,6 +463,9 @@ function setColorMode(m){ colorMode=m; document.getElementById('cm-price').class
 // 透明度滑桿
 /* ★ 兩個土地使用圖層同時開啟時提示（客戶回饋：顏色太繽紛、分不出來） */
 function checkLayerOverlap(){
+  /* ★ 國土利用現況開啟時，顯示九大類圖例（客戶：不知道顏色代表什麼） */
+  const lg = document.getElementById('luiLegend');
+  if (lg) lg.style.display = (layers.luimap && layers.luimap.active) ? 'block' : 'none';
   const w = document.getElementById('layerWarn');
   if (!w) return;
   const both = layers.luimap && layers.luimap.active && layers.nurban && layers.nurban.active;
@@ -494,6 +506,25 @@ function nearestInfo(lat, lng){
   return { district: best.district||'', section: best.section||'', km: Math.sqrt(bestD)*111 };
 }
 
+/* ★ 反向地理編碼：座標 → 行政區（拖曳後真正判斷落在哪一區）
+   只在使用者拖曳結束時呼叫一次，用量極低。 */
+async function reverseDistrict(lat, lng){
+  const key = params.get('gkey') || GKEY;
+  if (!key) return null;
+  try{
+    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=zh-TW&key=${key}`);
+    const j = await r.json();
+    if (j.status !== 'OK' || !j.results?.length) return null;
+    for (const c of j.results[0].address_components){
+      if (c.types.includes('administrative_area_level_2')) return c.long_name;   // 區
+    }
+    for (const c of j.results[0].address_components){
+      if (c.types.includes('locality')) return c.long_name;
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
 function targetPopupHtml(lat, lng){
   return `
   <div class="pop-title">📍 查詢目標</div>
@@ -515,14 +546,26 @@ targetMarker.on('dragend', function(){
   targetMarker.setPopupContent(targetPopupHtml(p.lat, p.lng)).openPopup();
   const el = document.getElementById('coordLine');
   if (el) el.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}（已手動校正）`;
-  /* ★ 拖曳後同步更新側欄的行政區（依最近成交點推估） */
-  const n = nearestInfo(p.lat, p.lng);
+  /* ★ 拖曳後：用反向地理編碼判斷真正的行政區（不再只靠最近成交點） */
   const dEl = document.getElementById('districtLine');
-  if (dEl && n && n.district) {
-    dEl.innerHTML = '<strong>' + n.district + '</strong>' +
-      '<span style="color:#7d8b98;font-size:11px;">（依最近成交點推估）</span>';
-  }
+  if (dEl) dEl.innerHTML = '<span style="color:#7d8b98;">判定中…</span>';
+  reverseDistrict(p.lat, p.lng).then(function(dist){
+    if (!dEl) return;
+    if (dist){
+      qDistrict = dist;                       // 同步全域，popup 也會對
+      dEl.innerHTML = '<strong>' + dist + '</strong>' +
+        '<span style="color:#3fb950;font-size:11px;">（已依拖曳位置更新）</span>';
+      targetMarker.setPopupContent(targetPopupHtml(p.lat, p.lng));
+    } else {
+      const n = nearestInfo(p.lat, p.lng);    // 退而求其次：用最近成交點
+      dEl.innerHTML = n && n.district
+        ? '<strong>' + n.district + '</strong><span style="color:#7d8b98;font-size:11px;">（依最近成交點推估）</span>'
+        : '<span style="color:#e0a53c;">無法判定</span>';
+    }
+  });
 });
+
+checkLayerOverlap();   // ★ 初始化圖例狀態
 
 // 顯示查詢資訊
 if (qSection || qDistrict || qLandNum) {
