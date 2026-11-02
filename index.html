@@ -356,7 +356,7 @@ const qLat      = parseFloat(params.get('lat')) || 22.505;
 const qLng      = parseFloat(params.get('lng')) || 120.395;
 const qSection  = decodeURIComponent(params.get('section') || '');
 const qLandNum  = decodeURIComponent(params.get('landNumber') || '');
-const API_FALLBACK = 'https://nickleo9.zeabur.app/webhook/land-map-api';
+const API_FALLBACK = 'https://n8n.znstudio216.com/webhook/land-map-api';
 const apiUrl    = params.get('api') || API_FALLBACK;
 const GKEY      = params.get('gkey') || '';   // ★ 反向地理編碼用；由 Block B 傳入   // ★ 沒帶 api= 也能用搜尋
 
